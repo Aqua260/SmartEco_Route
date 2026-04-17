@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>EcoRoute · AI Route Planner</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --bg: #030a06;
+            --surface: rgba(11, 26, 16, 0.7);
+            --green: #00ff8c;
+            --green-glow: rgba(0, 255, 140, 0.3);
+            --text: #e0fdf0;
+            --border: rgba(0, 255, 140, 0.15);
+        }
+
+        body {
+            background: var(--bg);
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(0, 255, 140, 0.05) 0%, transparent 20%),
+                radial-gradient(circle at 90% 80%, rgba(0, 255, 140, 0.05) 0%, transparent 20%);
+            color: var(--text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        #container {
+            max-width: 900px;
+            margin: auto;
+        }
+
+        h1 {
+            text-align: center;
+            background: linear-gradient(90deg, #fff, var(--green), #fff);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            animation: shine 4s linear infinite;
+        }
+
+        .card {
+            background: var(--surface);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            padding: 24px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 10px var(--green-glow);
+        }
+
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 20px;
+            align-items: center;
+        }
+
+        input,
+        select {
+            background: #112018;
+            color: white;
+            border: 1px solid var(--border);
+            padding: 10px;
+            border-radius: 6px;
+            width: 100%;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--green);
+            box-shadow: 0 0 8px var(--green-glow);
+        }
+
+        button {
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            border: none;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-add {
+            background: transparent;
+            border: 1px solid var(--green);
+            color: var(--green);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-add:hover {
+            background: var(--green);
+            color: black;
+            box-shadow: 0 0 15px var(--green);
+        }
+
+        .btn-run {
+            background: var(--green);
+            color: black;
+            width: 100%;
+            font-size: 1.2rem;
+            margin-top: 20px;
+            box-shadow: 0 4px 15px rgba(0, 255, 140, 0.2);
+        }
+
+        .btn-run:hover {
+            background: #00c452;
+            transform: translateY(-2px);
+        }
+
+        .btn-run.loading {
+            background: #112018;
+            color: var(--green);
+            cursor: wait;
+            border: 1px solid var(--green);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        #results {
+            display: none;
+            margin-top: 30px;
+            border: 1px solid var(--green);
+        }
+
+        #map {
+            height: 300px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .eco-banner {
+            background: rgba(0, 255, 106, 0.1);
+            border: 1px solid var(--green);
+            color: var(--green);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th {
+            text-align: left;
+            color: #557060;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .winner-row {
+            color: var(--green);
+            font-weight: bold;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @keyframes shine {
+            to { background-position: 200% center; }
+        }
+
+        .animated {
+            animation: slideIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        .savings-badge {
+            background: var(--green);
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-left: 8px;
+            animation: pulse-glow 2s infinite;
+        }
+
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 0 0 rgba(0, 255, 140, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(0, 255, 140, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 255, 140, 0); }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="container">
+        <h1>🌿 EcoRoute AI</h1>
+
+        <div class="card settings-grid">
+            <div>
+                <label for="start-location" style="display:block; margin-bottom:8px; font-size:0.9rem; color:#557060;">Current Location</label>
+                <input type="text" id="start-location" placeholder="e.g. Office" value="Office Main">
+            </div>
+            <div>
+                <label for="destination-location" style="display:block; margin-bottom:8px; font-size:0.9rem; color:#557060;">Destination</label>
+                <input type="text" id="destination-location" placeholder="e.g. Home" value="Home Station">
+            </div>
+        </div>
+
+        <div class="card settings-grid">
+            <div>
+                <label for="vehicle-select" style="display:block; margin-bottom:8px; font-size:0.9rem; color:#557060;">Vehicle Type</label>
+                <select id="vehicle-select" name="vehicle">
+                    {% for v in vehicle_types %}
+                    <option value="{{ v }}">{{ v.title() }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="model-select" style="display:block; margin-bottom:8px; font-size:0.9rem; color:#557060;">Prediction Engine</label>
+                <select id="model-select">
+                    <option value="decision_tree">Decision Tree (High Precision)</option>
+                    <option value="linear_regression">Linear Regression (Fast)</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="route-list"></div>
+
+        <div style="display: flex; gap: 10px;">
+            <button class="btn-add" onclick="addRoute()">+ Add Route Option</button>
+        </div>
+
+        <button class="btn-run" onclick="run()">✨ Predict Eco-Friendly Route</button>
+
+        <div id="results" class="card">
+            <div id="eco-win-container"></div>
+            <div id="summary"></div>
+            <div id="map"></div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Route Name</th>
+                        <th>Distance</th>
+                        <th>Lights/Obstacles</th>
+                        <th>Emissions</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const TRAFFIC = {{ traffic_levels | tojson | safe }};
+        const ROADS = {{ road_types | tojson | safe }};
+        let count = 0;
+        let map = null;
+
+        function cap(w) { return w.charAt(0).toUpperCase() + w.slice(1); }
+
+        // Add some fun emojis to the vehicle dropdown dynamically
+        const emojis = { "electric": "⚡", "hybrid": "🔋", "petrol": "⛽", "diesel": "🛢️", "truck": "🚛" };
+        window.addEventListener('DOMContentLoaded', () => {
+            const select = document.getElementById('vehicle-select');
+            Array.from(select.options).forEach(opt => {
+                if (emojis[opt.value]) opt.text = `${emojis[opt.value]} ${opt.text}`;
+            });
+        });
+
+        function addRoute() {
+            count++;
+            const div = document.createElement("div");
+            div.className = "card animated";
+            div.id = "row-" + count;
+
+            const trafficOpts = TRAFFIC.map(t => `<option value="${t}">${cap(t)}</option>`).join("");
+            const roadOpts = ROADS.map(r => `<option value="${r}">${cap(r)}</option>`).join("");
+
+            div.innerHTML = `
+            <div class="settings-grid" style="position:relative; align-items: end;">
+                <div style="display:flex; flex-direction:column; gap:2px">
+                    <span style="font-size:0.7rem; color:#557060">Route Name</span>
+                    <input class="name" placeholder="Name" value="Route ${count}">
+                </div>
+                <div style="display:flex; flex-direction:column; gap:2px">
+                    <span style="font-size:0.7rem; color:#557060">Distance</span>
+                    <div style="display:flex; align-items:center; gap:5px">
+                        <input type="number" class="dist" value="${12 + (count * 3)}" min="0.1" step="0.1" style="width:70px"> <span>km</span>
+                    </div>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:2px">
+                    <span style="font-size:0.7rem; color:#557060">Traffic</span>
+                    <select class="traffic">${trafficOpts}</select>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:2px">
+                    <span style="font-size:0.7rem; color:#557060">Road Type</span>
+                    <select class="road">${roadOpts}</select>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:2px">
+                    <span style="font-size:0.7rem; color:#557060">🚦 Lights</span>
+                    <input type="number" class="lights" value="${Math.floor(Math.random()*5)}" min="0">
+                </div>
+                <div style="display:flex; flex-direction:column; gap:2px">
+                    <span style="font-size:0.7rem; color:#557060">🚧 Obstacles</span>
+                    <input type="number" class="obs" value="0" min="0">
+                </div>
+                <button onclick="document.getElementById('row-${count}').remove()" style="background:#ff4444; color:white; padding:10px; border-radius:4px; margin-bottom: 2px;">Remove</button>
+            </div>
+        `;
+            document.getElementById("route-list").appendChild(div);
+        }
+
+        async function run() {
+            const btn = document.querySelector('.btn-run');
+            const originalText = btn.innerText;
+            
+            const routeElements = document.querySelectorAll('[id^="row-"]');
+            const routes = Array.from(routeElements).map(el => ({
+                name: el.querySelector('.name').value,
+                distance_km: parseFloat(el.querySelector('.dist').value),
+                traffic: el.querySelector('.traffic').value,
+                road_type: el.querySelector('.road').value,
+                traffic_lights: parseInt(el.querySelector('.lights').value),
+                obstacles: parseInt(el.querySelector('.obs').value)
+            }));
+
+            if (routes.length === 0) return alert("Add at least one route.");
+
+            try {
+                btn.innerText = "🤖 AI is analyzing routes...";
+                btn.classList.add('loading');
+                
+                const res = await fetch('/recommend', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        start_location: document.getElementById('start-location').value,
+                        destination: document.getElementById('destination-location').value,
+                        vehicle: document.getElementById('vehicle-select').value,
+                        model: document.getElementById('model-select').value,
+                        routes: routes
+                    })
+                });
+
+                const data = await res.json();
+                renderUI(data);
+            } catch (e) {
+                alert("Failed to get prediction.");
+            } finally {
+                btn.innerText = originalText;
+                btn.classList.remove('loading');
+            }
+        }
+
+        function renderUI(data) {
+            document.getElementById('results').style.display = 'block';
+            document.getElementById('results').classList.add('animated');
+
+            // 1. Eco Win Banner
+            const winContainer = document.getElementById('eco-win-container');
+            winContainer.innerHTML = (data.eco_win && data.co2_saved_g > 0)
+                ? `<div class="eco-banner animated" style="animation-delay: 0.1s">🏆 ECO-WIN! You saved <b>${data.co2_saved_g}g</b> of CO₂ by taking the greener path! 🌍</div>`
+                : `<div class="eco-banner animated" style="animation-delay: 0.1s; border-color: #557060; color: #557060; background: transparent;">✓ The shortest route is already the most eco-friendly!</div>`;
+
+            // 2. Summary
+            document.getElementById('summary').innerHTML = `
+            <h2 class="animated" style="margin:0; color:var(--green); animation-delay: 0.2s">Best Choice: ${data.recommended.name}</h2>
+            <p class="animated" style="color:var(--text); margin: 5px 0; animation-delay: 0.25s">🚩 From <b>${data.start_location}</b> to <b>${data.destination}</b></p>
+            <p class="animated" style="color:#557060; animation-delay: 0.3s">Powered by ${data.model_used}</p>
+        `;
+
+            // 3. Table Rows
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = data.all_routes.map(r => `
+            <tr class="${r.name === data.recommended.name ? 'winner-row' : ''}">
+                <td>${r.name} ${r.name === data.recommended.name ? '✓ <span class="savings-badge">BEST</span>' : ''}</td>
+                <td>${r.distance_km} km</td>
+                <td>🚦${r.traffic_lights} / 🚧${r.obstacles}</td>
+                <td>${r.predicted_emission_g} g CO₂</td>
+            </tr>
+        `).join('');
+
+            renderMap(data.all_routes, data.recommended.name);
+        }
+
+        function renderMap(routes, bestName) {
+            if (map) map.remove();
+            map = L.map('map');
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+            const startLat = 51.505;
+            const startLng = -0.09;
+            const bounds = L.latLngBounds([[startLat, startLng]]);
+
+            routes.forEach((r, i) => {
+                const isBest = r.name === bestName;
+                const color = isBest ? '#00ff6e' : '#ff4444';
+                
+                // Create simulated end coordinates based on distance
+                const endLat = startLat + (r.distance_km * 0.005);
+                const endLng = startLng + (i * 0.015) - (routes.length * 0.0075);
+                bounds.extend([endLat, endLng]);
+
+                const polyline = L.polyline([
+                    [startLat, startLng],
+                    [endLat, endLng]
+                ], { color: color, weight: isBest ? 6 : 3, opacity: 0.7 }).addTo(map);
+                
+                polyline.bindPopup(`<b>${r.name}</b><br>${r.distance_km}km`);
+
+                // Helper to add obstacle markers along the line
+                const addPoint = (t, emoji) => {
+                    const lat = startLat + t * (endLat - startLat);
+                    const lng = startLng + t * (endLng - startLng);
+                    L.marker([lat, lng], {
+                        icon: L.divIcon({
+                            html: `<div style="font-size:18px; filter:drop-shadow(0 0 2px white);">${emoji}</div>`,
+                            className: 'map-obstacle',
+                            iconSize: [20, 20]
+                        })
+                    }).addTo(map);
+                };
+
+                // Place Traffic Lights
+                for(let j=0; j<r.traffic_lights; j++) addPoint(0.1 + Math.random()*0.8, '🚦');
+                
+                // Place Obstacles (Houses, Vehicles, People)
+                const obsTypes = ['🏠', '🚗', '🚶'];
+                for(let j=0; j<r.obstacles; j++) addPoint(0.1 + Math.random()*0.8, obsTypes[j % obsTypes.length]);
+            });
+
+            map.fitBounds(bounds, { padding: [50, 50] });
+        }
+
+        // Default Routes
+        window.onload = () => { addRoute(); addRoute(); };
+    </script>
+
+</body>
+
+</html>
